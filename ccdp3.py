@@ -3,15 +3,13 @@
 
 # Robótica Computacional - 
 # Grado en Ingeniería Informática (Cuarto)
-# Práctica: Resolución de la cinemática inversa mediante CCD
-#           (Cyclic Coordinate Descent).
 
+import math
 import sys
 from math import *
 import numpy as np
 import matplotlib.pyplot as plt
 import colorsys as cs
-import math
 
 # ******************************************************************************
 # Declaración de funciones
@@ -62,17 +60,28 @@ def cin_dir(th,a):
 # Cálculo de la cinemática inversa de forma iterativa por el método CCD
 
 # valores articulares arbitrarios para la cinemática directa inicial
-th=[0.,0.,0.]
+th=[0.,0.,0.] 
 a =[5.,5.,5.]
+ty=["rev","rev","des"]
 L = sum(a) # variable para representación gráfica
-EPSILON = .1 #ajustado para que no de tantas iteraciones
+# modificar para que siempre se vea el robot
+EPSILON = .8
+MAX_ANGLE = math.pi / 2    # Límite superior (90 grados)
+MIN_ANGLE = -(math.pi / 2) # Límite superior (90 grados)
+MAX_LENGTH = 15
+MIN_LENGTH = 0
+values = [[ math.pi  , MAX_ANGLE       ,MAX_ANGLE ],
+          [-math.pi  , MIN_ANGLE       ,MIN_ANGLE ],
+          [MAX_LENGTH, MAX_LENGTH      ,MAX_LENGTH],
+          [MIN_LENGTH, MIN_LENGTH      ,MIN_LENGTH]]
 
 #plt.ion() # modo interactivo
 
 # introducción del punto para la cinemática inversa
-if len(sys.argv) != 3:
-  sys.exit("python " + sys.argv[0] + " x y")
-objetivo=[float(i) for i in sys.argv[1:]]
+if len(sys.argv) != 4:
+  sys.exit("python " + sys.argv[0] + " x y valor de tabla")
+objetivo=[float(i) for i in sys.argv[1:3]]
+valor_tabla=sys.argv[3]
 O=cin_dir(th,a)
 #O=zeros(len(th)+1) # Reservamos estructura en memoria
  # Calculamos la posicion inicial
@@ -80,25 +89,66 @@ print ("- Posicion inicial:")
 muestra_origenes(O)
 
 dist = float("inf")
+dist = np.linalg.norm(np.subtract(objetivo,O[-1][-1]))
 prev = 0.
 iteracion = 1
+L += (dist / float(valor_tabla))
+print("DISTANCIA: " + str(dist))
 while (dist > EPSILON and abs(prev-dist) > EPSILON/100.):
   prev = dist
-  O=[cin_dir(th,a)] #O[iteracion][articulacion][0 o 1] 0 = x, 1 = y
+  O=[cin_dir(th,a)]
   # Para cada combinación de articulaciones:
   for i in range(len(th)):
-    # cálculo de la cinemática inversa:
-    p = O[-1][(len(th)-1)-i] 
+    # cálculo de la cinemática inversa: comprobar desde aqui 
+    # En clase se recomendó que usaramos la trigonometría
+        #Pseudocódigo:
+    # obtener coordenadas de p
+    p = O[-1][len(th) - i - 1]
+    # obtener coordenadas de t
     t = objetivo
-    EF = O[-1][-1] #el ultimo origen del brazo
-    alpha2 = math.atan2((t[1]-p[1]),(t[0]-p[0]))
-    alpha1 = math.atan2((EF[1]-p[1]),(EF[0]-p[0]))
-    incThetha = alpha2 - alpha1
-    if(th[(len(th)-1)-i] < math.pi or th[(len(th)-1)-i] > math.pi):
-      th[(len(th)-1)-i] = th[(len(th)-1)-i] + math.remainder(incThetha, tau) #ajustar valor del angulo a un valor entre -pi y pi
-    else:
-      th[(len(th)-1)-i] = th[(len(th)-1)-i] + incThetha
+    # obtener coordanadas de EF.
+    EF = O[-1][-1]
+    if ty[len(th) - i - 1] == "rev":
+
+      alpha2  = math.atan2(t[1]-p[1],t[0]-p[0])
+      alpha1 = math.atan2(EF[1]-p[1],EF[0]-p[0])
+      
+      th[len(th) - i -1 ] = th[len(th) - i -1] + (alpha2 - alpha1)
+      th[len(th) - i - 1] = ((th[len(th) - i - 1] + math.pi) % (2 * math.pi)) - math.pi
+      #th[(len(th)-1)-i] = th[(len(th)-1)-i] + math.remainder(incThetha, tau) ?
+      
+      # Restringir el ángulo al límite superior
+      if th[len(th) - i - 1] > values[0][len(th) - i - 1]:
+          th[len(th) - i - 1] = values[0][len(th) - i - 1]
+
+      # Restringir el ángulo al límite superior
+      if th[len(th) - i - 1] < values[1][len(th) - i - 1]:
+          th[len(th) - i - 1] = values[1][len(th) - i - 1]
+          
+    if ty[len(th) - i - 1] == "des":
+      #como sacar w:
+      #w=sumatorio(thethai) desde i=1 hasta i actual
+      #suma de todos los angulos de las articulaciones 
+      w = 0
+      w = sum(th[:len(th) - i - 1]) #?
+      #u(cos(w),sen(w))
+      u = ( math.cos(w), math.sin(w))
+      
+      #v(xt-xef,yt-yef)
+      v = (t[0]-EF[0],t[1]-EF[1])
+      d = np.dot(u,v)
+      a[len(a) - i - 1] = a[len(a) - i - 1] + d
+      
+      # Restringir la longitud al límite superior
+      if a[len(a) - i - 1] > values[2][len(th) - i - 1]:
+          a[len(a) - i - 1] = values[2][len(th) - i - 1]
+
+      # Restringir la longitud al límite superior
+      if a[len(a) - i - 1] < values[3][len(th) - i - 1]:
+          a[len(a) - i - 1] = values[3][len(th) - i - 1]
+
     O.append(cin_dir(th,a))
+
 
   dist = np.linalg.norm(np.subtract(objetivo,O[-1][-1]))
   print ("\n- Iteracion " + str(iteracion) + ':')
